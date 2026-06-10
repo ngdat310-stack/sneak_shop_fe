@@ -86,6 +86,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/chat/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/admin/chat/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

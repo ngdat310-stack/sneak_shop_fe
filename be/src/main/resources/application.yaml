@@ -38,13 +38,16 @@ spring:
           starttls:
             enable: true
 
+server:
+  port: ${PORT:8080}
+
 app:
   jwt:
     secret: "sneak-shop-local-development-secret-key-change-me-at-least-32chars"
     expiration-minutes: 1440
   upload:
     dir: uploads/images
-    base-url: http://localhost:8080/images
+    base-url: ${APP_UPLOAD_BASE_URL:http://localhost:8080}/images
   mail:
     from: ${MAIL_FROM:no-reply@sneakshop.vn}
   vnpay:
@@ -69,7 +72,7 @@ app:
   zalo-auth:
     app-id: "4087361764145925062"
     secret-key: "xud5lbE9XYYEDXmQJGY0"
-    redirect-uri: "https://daintily-affection-rebirth.ngrok-free.dev/zalo/callback"
+    redirect-uri: ${APP_ZALO_REDIRECT_URI:https://daintily-affection-rebirth.ngrok-free.dev/zalo/callback}
   zalopay:
     mock-enabled: true
     app-id: "2553"
@@ -79,9 +82,9 @@ app:
     return-url: "http://localhost:8080/api/payments/zalopay/return"
     callback-url: "http://localhost:8080/api/payments/zalopay/callback"
   backend:
-    base-url: "http://localhost:8080"
+    base-url: ${APP_BACKEND_BASE_URL:http://localhost:8080}
   frontend:
-    base-url: "http://localhost:3000"
+    base-url: ${APP_FRONTEND_BASE_URL:http://localhost:3000}
 
 springdoc:
   api-docs:
@@ -94,7 +97,7 @@ springdoc:
 
 web:
   cors:
-    allowed-origins: "http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177"
+    allowed-origins: ${WEB_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177}
 
 ---
 spring:
