@@ -56,6 +56,17 @@ const firstChildOf = (items: Category[], parentId: number) =>
       return orderDiff || a.name.localeCompare(b.name);
     })[0];
 
+const rootAncestorOf = (items: Category[], category: Category) => {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  let current = category;
+  while (current.parentId != null) {
+    const parent = byId.get(current.parentId);
+    if (!parent || parent.deleted) break;
+    current = parent;
+  }
+  return current;
+};
+
 const emptyCreateForm = (): CreateFormState => ({
   status: "active",
   main: emptyCreateLevel(true),
@@ -233,17 +244,26 @@ export default function AdminCategoriesPage() {
     setEditing(null);
     setOpen(true);
   };
-  const openEdit = (c: Category) => {
-    const parent = firstChildOf(categories, c.id);
-    const child = parent ? firstChildOf(categories, parent.id) : undefined;
+  const openEdit = (c: Category, depth = 0) => {
+    const root = rootAncestorOf(categories, c);
+    const parent = depth === 0
+      ? firstChildOf(categories, root.id)
+      : depth === 1
+        ? c
+        : categories.find((item) => item.id === c.parentId);
+    const child = depth === 0
+      ? (parent ? firstChildOf(categories, parent.id) : undefined)
+      : depth === 1
+        ? firstChildOf(categories, c.id)
+        : c;
 
     setCreateForm({
-      status: c.status === "inactive" ? "inactive" : "active",
-      main: categoryToLevel(c),
+      status: root.status === "inactive" ? "inactive" : "active",
+      main: categoryToLevel(root),
       parent: categoryToLevel(parent),
       child: categoryToLevel(child),
     });
-    setEditing(c.id);
+    setEditing(root.id);
     setOpen(true);
   };
 
@@ -320,20 +340,22 @@ export default function AdminCategoriesPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {isRoot && (
-                      <div className="flex gap-1 justify-end">
-                        {c.deleted ? (
+                    <div className="flex gap-1 justify-end">
+                      {c.deleted ? (
+                        isRoot ? (
                           <Button size="sm" variant="outline" className="text-green-600 hover:text-green-700" onClick={() => handleRestore(c.id)}>
                             <RotateCcw className="w-3 h-3" />
                           </Button>
-                        ) : (
-                          <>
-                            <Button size="sm" variant="outline" onClick={() => openEdit(c)}><Pencil className="w-3 h-3" /></Button>
+                        ) : null
+                      ) : (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => openEdit(c, depth)}><Pencil className="w-3 h-3" /></Button>
+                          {isRoot && (
                             <Button size="sm" variant="outline" className="text-red-500 hover:text-red-600" onClick={() => handleDelete(c.id)}><Trash2 className="w-3 h-3" /></Button>
-                          </>
-                        )}
-                      </div>
-                    )}
+                          )}
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
