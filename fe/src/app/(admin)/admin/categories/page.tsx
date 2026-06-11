@@ -18,14 +18,6 @@ const toSlug = (name: string) =>
     .replace(/[^a-z0-9\s-]/g, "")
     .trim().replace(/\s+/g, "-").replace(/-+/g, "-");
 
-interface FormState {
-  parentId: string;
-  name: string;
-  slug: string;
-  sortOrder: string;
-  status: "active" | "inactive";
-}
-
 interface CreateLevelState {
   enabled: boolean;
   name: string;
@@ -38,10 +30,6 @@ interface CreateFormState {
   parent: CreateLevelState;
   child: CreateLevelState;
 }
-
-const emptyForm = (): FormState => ({
-  parentId: "", name: "", slug: "", sortOrder: "", status: "active",
-});
 
 const emptyCreateLevel = (enabled = false): CreateLevelState => ({
   enabled,
@@ -62,6 +50,7 @@ const getDescendantIds = (items: Category[], id: number): number[] => {
 };
 
 type CategoryNode = Category & { children: CategoryNode[] };
+const PARENT_DATALIST_ID = "category-parent-options";
 
 const buildCategoryTree = (items: Category[]): CategoryNode[] => {
   const map = new Map<number, CategoryNode>();
@@ -107,7 +96,6 @@ export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<FormState>(emptyForm());
   const [createForm, setCreateForm] = useState<CreateFormState>(emptyCreateForm());
   const [editing, setEditing] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -124,37 +112,51 @@ export default function AdminCategoriesPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editing !== null) {
-      if (!form.name.trim()) { toast.error("Vui lòng nhập tên danh mục"); return; }
-    } else {
-      if (!createForm.main.name.trim()) { toast.error("Vui lòng nhập danh mục chính"); return; }
-      if (createForm.child.enabled && createForm.child.name.trim() && !createForm.parent.name.trim()) {
-        toast.error("Danh mục con cần có danh mục cha");
-        return;
-      }
+    if (!createForm.main.name.trim()) { toast.error("Vui lòng nhập danh mục chính"); return; }
+    if (createForm.child.enabled && createForm.child.name.trim() && !createForm.parent.name.trim()) {
+      toast.error("Danh mục con cần có danh mục cha");
+      return;
     }
 
     setSaving(true);
     try {
+      const createCategory = async (name: string, parentId: number | null, sortOrder: string) =>
+        categoriesApi.adminCreate({
+          name: name.trim(),
+          slug: toSlug(name.trim()),
+          parentId,
+          sortOrder: sortOrder ? Number(sortOrder) : 0,
+          status: createForm.status,
+        });
+
       if (editing !== null) {
         const payload = {
-          name: form.name.trim(), slug: form.slug,
-          parentId: form.parentId ? Number(form.parentId) : null,
-          sortOrder: form.sortOrder ? Number(form.sortOrder) : 0,
-          status: form.status,
+          name: createForm.main.name.trim(),
+          slug: toSlug(createForm.main.name.trim()),
+          parentId: null,
+          sortOrder: createForm.main.sortOrder ? Number(createForm.main.sortOrder) : 0,
+          status: createForm.status,
         };
         await categoriesApi.adminUpdate(editing, payload);
-        toast.success("Đã cập nhật");
-      } else {
-        const createCategory = async (name: string, parentId: number | null, sortOrder: string) =>
-          categoriesApi.adminCreate({
-            name: name.trim(),
-            slug: toSlug(name.trim()),
-            parentId,
-            sortOrder: sortOrder ? Number(sortOrder) : 0,
-            status: createForm.status,
-          });
 
+        const parentName = createForm.parent.name.trim();
+        let parentId: number | null = null;
+        if (createForm.parent.enabled && parentName) {
+          const parentRes = await createCategory(parentName, editing, createForm.parent.sortOrder);
+          parentId = parentRes.data.result.id;
+        }
+
+        if (createForm.child.enabled && createForm.child.name.trim()) {
+          await createCategory(
+            createForm.child.name,
+            parentId ?? editing,
+            createForm.child.sortOrder
+          );
+        }
+        toast.success("Đã cập nhật");
+      }
+
+      if (editing === null) {
         const mainRes = await createCategory(createForm.main.name, null, createForm.main.sortOrder);
         const mainId = mainRes.data.result.id;
         const parentName = createForm.parent.name.trim();
@@ -198,11 +200,15 @@ export default function AdminCategoriesPage() {
     setOpen(true);
   };
   const openEdit = (c: Category) => {
-    setForm({
-      parentId: c.parentId ? String(c.parentId) : "",
-      name: c.name, slug: c.slug,
-      sortOrder: c.sortOrder != null ? String(c.sortOrder) : "",
+    setCreateForm({
       status: c.status === "inactive" ? "inactive" : "active",
+      main: {
+        enabled: true,
+        name: c.name,
+        sortOrder: c.sortOrder != null ? String(c.sortOrder) : "",
+      },
+      parent: emptyCreateLevel(false),
+      child: emptyCreateLevel(false),
     });
     setEditing(c.id);
     setOpen(true);
@@ -281,18 +287,20 @@ export default function AdminCategoriesPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-1 justify-end">
-                      {c.deleted ? (
-                        <Button size="sm" variant="outline" className="text-green-600 hover:text-green-700" onClick={() => handleRestore(c.id)}>
-                          <RotateCcw className="w-3 h-3" />
-                        </Button>
-                      ) : (
-                        <>
-                          <Button size="sm" variant="outline" onClick={() => openEdit(c)}><Pencil className="w-3 h-3" /></Button>
-                          <Button size="sm" variant="outline" className="text-red-500 hover:text-red-600" onClick={() => handleDelete(c.id)}><Trash2 className="w-3 h-3" /></Button>
-                        </>
-                      )}
-                    </div>
+                    {isRoot && (
+                      <div className="flex gap-1 justify-end">
+                        {c.deleted ? (
+                          <Button size="sm" variant="outline" className="text-green-600 hover:text-green-700" onClick={() => handleRestore(c.id)}>
+                            <RotateCcw className="w-3 h-3" />
+                          </Button>
+                        ) : (
+                          <>
+                            <Button size="sm" variant="outline" onClick={() => openEdit(c)}><Pencil className="w-3 h-3" /></Button>
+                            <Button size="sm" variant="outline" className="text-red-500 hover:text-red-600" onClick={() => handleDelete(c.id)}><Trash2 className="w-3 h-3" /></Button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );
@@ -306,69 +314,120 @@ export default function AdminCategoriesPage() {
           <DialogHeader>
             <DialogTitle>{editing !== null ? "Sửa danh mục" : "Thêm danh mục"}</DialogTitle>
           </DialogHeader>
-          {editing !== null ? (
-            <form onSubmit={handleSave} className="grid gap-4 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <p className="text-sm font-medium mb-1">Danh mục cha <span className="text-gray-400">(không bắt buộc)</span></p>
-                <Select value={form.parentId || ""} onValueChange={(v) => setForm((f) => ({ ...f, parentId: v ?? "" }))}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Không chọn danh mục cha" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {parentOptions.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-400 mt-1">
-                  Để trống thì lưu thành danh mục cha. Chọn một danh mục cha để lưu thành danh mục con.
-                </p>
+          <form onSubmit={handleSave} className="space-y-5">
+            <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="font-medium">Danh mục chính <span className="text-red-500">*</span></p>
+                <span className="text-xs text-gray-400">Bắt buộc</span>
               </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <p className="text-sm font-medium mb-1">Tên danh mục chính</p>
+                  <Input
+                    value={createForm.main.name}
+                    onChange={(e) => setCreateForm((f) => ({
+                      ...f,
+                      main: { ...f.main, name: e.target.value },
+                    }))}
+                    required
+                  />
+                </div>
+                <div>
+                  <p className="text-sm font-medium mb-1">STT</p>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={createForm.main.sortOrder}
+                    onChange={(e) => setCreateForm((f) => ({
+                      ...f,
+                      main: { ...f.main, sortOrder: e.target.value },
+                    }))}
+                  />
+                </div>
+              </div>
+            </div>
 
-              <div className="md:col-span-2">
-                <p className="text-sm font-medium mb-1">Tên danh mục <span className="text-red-500">*</span></p>
-                <Input value={form.name} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, name: v, slug: toSlug(v) })); }} required />
-              </div>
-
-              <div>
-                <p className="text-sm font-medium mb-1">Số thứ tự</p>
-                <Input type="number" value={form.sortOrder} onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))} min={1} />
-                <p className="text-xs text-gray-400 mt-1">Áp dụng cho cả danh mục cha và danh mục con.</p>
-              </div>
-
-              <div>
-                <p className="text-sm font-medium mb-1">Trạng thái</p>
-                <Select value={form.status} onValueChange={(v) => setForm((f) => ({ ...f, status: v === "inactive" ? "inactive" : "active" }))}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Hoạt động</SelectItem>
-                    <SelectItem value="inactive">Ẩn</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="md:col-span-2 flex gap-2 justify-end pt-1">
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
-                <Button type="submit" disabled={saving}>{saving ? "Đang lưu..." : "Lưu"}</Button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleSave} className="space-y-5">
+            {createForm.parent.enabled ? (
               <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="font-medium">Danh mục chính <span className="text-red-500">*</span></p>
-                  <span className="text-xs text-gray-400">Bắt buộc</span>
+                  <p className="font-medium">Danh mục cha</p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCreateForm((f) => ({
+                      ...f,
+                      parent: emptyCreateLevel(false),
+                      child: emptyCreateLevel(false),
+                    }))}
+                  >
+                    Bỏ
+                  </Button>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <p className="text-sm font-medium mb-1">Tên danh mục chính</p>
+                    <p className="text-sm font-medium mb-1">Tên danh mục cha</p>
                     <Input
-                      value={createForm.main.name}
+                      list={PARENT_DATALIST_ID}
+                      value={createForm.parent.name}
                       onChange={(e) => setCreateForm((f) => ({
                         ...f,
-                        main: { ...f.main, name: e.target.value },
+                        parent: { ...f.parent, name: e.target.value },
                       }))}
-                      required
+                      placeholder="Gõ để chọn hoặc nhập"
+                    />
+                    <datalist id={PARENT_DATALIST_ID}>
+                      {parentOptions.map((c) => (
+                        <option key={c.id} value={c.name} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium mb-1">STT</p>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={createForm.parent.sortOrder}
+                      onChange={(e) => setCreateForm((f) => ({
+                        ...f,
+                        parent: { ...f.parent, sortOrder: e.target.value },
+                      }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateForm((f) => ({ ...f, parent: emptyCreateLevel(true) }))}
+              >
+                Thêm danh mục cha
+              </Button>
+            )}
+
+            {createForm.child.enabled ? (
+              <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="font-medium">Danh mục con</p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCreateForm((f) => ({ ...f, child: emptyCreateLevel(false) }))}
+                  >
+                    Bỏ
+                  </Button>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm font-medium mb-1">Tên danh mục con</p>
+                    <Input
+                      value={createForm.child.name}
+                      onChange={(e) => setCreateForm((f) => ({
+                        ...f,
+                        child: { ...f.child, name: e.target.value },
+                      }))}
                     />
                   </div>
                   <div>
@@ -376,141 +435,49 @@ export default function AdminCategoriesPage() {
                     <Input
                       type="number"
                       min={1}
-                      value={createForm.main.sortOrder}
+                      value={createForm.child.sortOrder}
                       onChange={(e) => setCreateForm((f) => ({
                         ...f,
-                        main: { ...f.main, sortOrder: e.target.value },
+                        child: { ...f.child, sortOrder: e.target.value },
                       }))}
                     />
                   </div>
                 </div>
               </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateForm((f) => ({
+                  ...f,
+                  parent: f.parent.enabled ? f.parent : emptyCreateLevel(true),
+                  child: emptyCreateLevel(true),
+                }))}
+              >
+                Thêm danh mục con
+              </Button>
+            )}
 
-              {createForm.parent.enabled ? (
-                <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">Danh mục cha</p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setCreateForm((f) => ({
-                        ...f,
-                        parent: emptyCreateLevel(false),
-                        child: emptyCreateLevel(false),
-                      }))}
-                    >
-                      Bỏ
-                    </Button>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div>
-                      <p className="text-sm font-medium mb-1">Tên danh mục cha</p>
-                      <Input
-                        value={createForm.parent.name}
-                        onChange={(e) => setCreateForm((f) => ({
-                          ...f,
-                          parent: { ...f.parent, name: e.target.value },
-                        }))}
-                      />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium mb-1">STT</p>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={createForm.parent.sortOrder}
-                        onChange={(e) => setCreateForm((f) => ({
-                          ...f,
-                          parent: { ...f.parent, sortOrder: e.target.value },
-                        }))}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setCreateForm((f) => ({ ...f, parent: emptyCreateLevel(true) }))}
+            <div className="rounded-xl border bg-white p-4 grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-sm font-medium mb-1">Trạng thái</p>
+                <Select
+                  value={createForm.status}
+                  onValueChange={(v) => setCreateForm((f) => ({ ...f, status: v === "inactive" ? "inactive" : "active" }))}
                 >
-                  Thêm danh mục cha
-                </Button>
-              )}
-
-              {createForm.child.enabled ? (
-                <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">Danh mục con</p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setCreateForm((f) => ({ ...f, child: emptyCreateLevel(false) }))}
-                    >
-                      Bỏ
-                    </Button>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div>
-                      <p className="text-sm font-medium mb-1">Tên danh mục con</p>
-                      <Input
-                        value={createForm.child.name}
-                        onChange={(e) => setCreateForm((f) => ({
-                          ...f,
-                          child: { ...f.child, name: e.target.value },
-                        }))}
-                      />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium mb-1">STT</p>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={createForm.child.sortOrder}
-                        onChange={(e) => setCreateForm((f) => ({
-                          ...f,
-                          child: { ...f.child, sortOrder: e.target.value },
-                        }))}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setCreateForm((f) => ({
-                    ...f,
-                    parent: f.parent.enabled ? f.parent : emptyCreateLevel(true),
-                    child: emptyCreateLevel(true),
-                  }))}
-                >
-                  Thêm danh mục con
-                </Button>
-              )}
-
-              <div className="rounded-xl border bg-white p-4 grid gap-4 md:grid-cols-2">
-                <div>
-                  <p className="text-sm font-medium mb-1">Trạng thái</p>
-                  <Select
-                    value={createForm.status}
-                    onValueChange={(v) => setCreateForm((f) => ({ ...f, status: v === "inactive" ? "inactive" : "active" }))}
-                  >
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Hoạt động</SelectItem>
-                      <SelectItem value="inactive">Ẩn</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-end justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
-                  <Button type="submit" disabled={saving}>{saving ? "Đang lưu..." : "Lưu"}</Button>
-                </div>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Hoạt động</SelectItem>
+                    <SelectItem value="inactive">Ẩn</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </form>
-          )}
+              <div className="flex items-end justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Hủy</Button>
+                <Button type="submit" disabled={saving}>{saving ? "Đang lưu..." : editing !== null ? "Cập nhật" : "Lưu"}</Button>
+              </div>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
