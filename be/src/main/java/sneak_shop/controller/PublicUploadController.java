@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,9 +19,6 @@ public class PublicUploadController {
 
     @Value("${app.upload.dir:uploads/images}")
     private String uploadDir;
-
-    @Value("${app.upload.base-url:http://localhost:8080/images}")
-    private String baseUrl;
 
     @PostMapping("/upload")
     public ResponseEntity<Map<String, String>> upload(@RequestParam("file") MultipartFile file) throws IOException {
@@ -47,6 +45,9 @@ public class PublicUploadController {
         Path dest = dir.resolve(filename);
         java.nio.file.Files.copy(file.getInputStream(), dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
-        return ResponseEntity.ok(Map.of("url", baseUrl + "/" + filename));
+        return ResponseEntity.ok(Map.of("url", ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/images/")
+                .path(filename)
+                .toUriString()));
     }
 }

@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,9 +24,6 @@ public class AdminImageController {
 
     @Value("${app.upload.dir:uploads/images}")
     private String uploadDir;
-
-    @Value("${app.upload.base-url:http://localhost:8080/images}")
-    private String baseUrl;
 
     @PostMapping("/upload")
     public ResponseEntity<Map<String, String>> upload(@RequestParam("file") MultipartFile file) throws IOException {
@@ -54,6 +52,9 @@ public class AdminImageController {
         String filename = UUID.randomUUID() + ext;
         Path dest = dir.resolve(filename);
         Files.copy(file.getInputStream(), dest, StandardCopyOption.REPLACE_EXISTING);
-        return baseUrl + "/" + filename;
+        return ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/images/")
+                .path(filename)
+                .toUriString();
     }
 }

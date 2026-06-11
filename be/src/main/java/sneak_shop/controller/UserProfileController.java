@@ -6,6 +6,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import sneak_shop.common.exception.AppException;
 import sneak_shop.common.exception.ErrorCode;
 import sneak_shop.common.response.ApiResponse;
@@ -32,9 +33,6 @@ public class UserProfileController {
 
     @Value("${app.upload.dir:uploads/images}")
     private String uploadDir;
-
-    @Value("${app.upload.base-url:http://localhost:8080/images}")
-    private String baseUrl;
 
     public UserProfileController(UserRepository userRepository) {
         this.userRepository = userRepository;
@@ -98,7 +96,10 @@ public class UserProfileController {
             ext = original.substring(original.lastIndexOf("."));
         String filename = "avatar_" + ctx.id() + "_" + UUID.randomUUID() + ext;
         file.transferTo(dir.resolve(filename));
-        String url = baseUrl + "/" + filename;
+        String url = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/images/")
+                .path(filename)
+                .toUriString();
 
         UserEntity user = userRepository.findById(ctx.id())
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "User khong ton tai"));
