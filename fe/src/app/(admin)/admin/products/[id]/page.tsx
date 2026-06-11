@@ -29,12 +29,18 @@ const toSlug = (name: string) => {
 };
 const normalizeColor = (value: string) => value.trim().toLowerCase();
 
-interface MediaDraft  { localId: string; url: string; type: string; }
+interface MediaDraft  { localId: string; url: string; type: "image" | "video"; }
 interface ColorDraft  { localId: string; color: string; stockQuantity: string; imageUrl: string; }
 interface VariantDraft { localId: string; size: string; price: string; colors: ColorDraft[]; }
 
 const emptyColor   = (): ColorDraft   => ({ localId: uid("c"), color: "", stockQuantity: "0", imageUrl: "" });
 const emptyVariant = (): VariantDraft => ({ localId: uid("v"), size: "", price: "", colors: [emptyColor()] });
+const inferMediaTypeFromFile = (file: File): "image" | "video" => file.type.startsWith("video/") ? "video" : "image";
+const inferMediaTypeFromUrl = (url: string): "image" | "video" => {
+  const clean = url.split("?")[0].toLowerCase();
+  if (/\.(mp4|webm|ogg|mov|m4v)$/.test(clean)) return "video";
+  return "image";
+};
 
 const mapVariants = (items: Product["variants"]): VariantDraft[] => {
   if (!items?.length) return [emptyVariant()];
@@ -118,7 +124,7 @@ export default function AdminProductFormPage() {
           .map((img, idx) => ({
             localId: `media-${img.id ?? idx}`,
             url: img.imageUrl.trim(),
-            type: img.type || "image",
+            type: img.type === "video" ? "video" : inferMediaTypeFromUrl(img.imageUrl.trim()),
           })));
         setVariants(mapVariants(p.variants));
       })
@@ -220,24 +226,27 @@ export default function AdminProductFormPage() {
   };
 
   const handleGalleryDrop = async (files: FileList | File[]) => {
-    const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    if (!images.length) return;
+    const mediaFiles = Array.from(files).filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    if (!mediaFiles.length) return;
     setUploadingGallery(true);
     try {
-      const urls = images.length === 1
-        ? [await uploadOne(images[0])]
-        : await imagesApi.uploadMultiple(images);
+      const uploaded = mediaFiles.length === 1
+        ? [{ url: await uploadOne(mediaFiles[0]), type: inferMediaTypeFromFile(mediaFiles[0]) }]
+        : await Promise.all(mediaFiles.map(async (file) => ({
+            url: await uploadOne(file),
+            type: inferMediaTypeFromFile(file),
+          })));
       setMedia((curr) => {
         const remaining = MAX_GALLERY - curr.length;
         if (remaining <= 0) { toast.error(`Tối đa ${MAX_GALLERY} ảnh thật`); return curr; }
-        const toAdd = urls
-          .map((url) => url.trim())
-          .filter(Boolean)
+        const toAdd = uploaded
+          .map((item) => ({ url: item.url.trim(), type: item.type }))
+          .filter((item) => Boolean(item.url))
           .slice(0, remaining)
-          .filter((url) => !curr.some((m) => m.url === url));
-        return [...curr, ...toAdd.map((url) => ({ localId: uid("media"), url, type: "image" }))];
+          .filter((item) => !curr.some((m) => m.url === item.url));
+        return [...curr, ...toAdd.map((item) => ({ localId: uid("media"), url: item.url, type: item.type }))];
       });
-      toast.success("Đã thêm ảnh sản phẩm");
+      toast.success("Đã thêm media sản phẩm");
     } catch { toast.error("Không tải được ảnh sản phẩm"); }
     finally { setUploadingGallery(false); }
   };
@@ -516,7 +525,7 @@ export default function AdminProductFormPage() {
             <div>
               <h2 className="font-semibold text-gray-700">Ảnh sản phẩm</h2>
               <p className="text-sm text-gray-500">
-                Tối đa {MAX_GALLERY} ảnh. Ảnh màu upload ở phía dưới cũng được tính vào đây.
+                Tối đa {MAX_GALLERY} media. Ảnh màu upload ở phía dưới cũng được tính vào đây.
                 <span className="ml-2 font-medium text-gray-700">{media.filter((item) => item.url.trim()).length}/{MAX_GALLERY}</span>
               </p>
             </div>
@@ -524,10 +533,10 @@ export default function AdminProductFormPage() {
               onClick={() => galleryInputRef.current?.click()}
               disabled={uploadingGallery || media.filter((item) => item.url.trim()).length >= MAX_GALLERY}
             >
-              <Plus className="w-4 h-4 mr-2" />{uploadingGallery ? "Đang tải..." : "Thêm ảnh"}
+              <Plus className="w-4 h-4 mr-2" />{uploadingGallery ? "Đang tải..." : "Thêm media"}
             </Button>
           </div>
-          <input ref={galleryInputRef} type="file" accept="image/*" multiple className="hidden"
+          <input ref={galleryInputRef} type="file" accept="image/*,video/*" multiple className="hidden"
             onChange={(e) => { const files = e.target.files; if (files?.length) void handleGalleryDrop(files); e.currentTarget.value = ""; }} />
 
           <div
@@ -537,7 +546,7 @@ export default function AdminProductFormPage() {
           >
             {media.filter((item) => item.url.trim()).length === 0 ? (
               <div className="flex min-h-24 items-center justify-center text-sm text-gray-400">
-                Thả ảnh vào đây hoặc dùng nút thêm ảnh
+                Thả ảnh/video vào đây hoặc dùng nút thêm media
               </div>
             ) : (
               <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
@@ -550,7 +559,20 @@ export default function AdminProductFormPage() {
                     onDrop={() => { if (dragIndex !== null) { moveMedia(dragIndex, index); setDragIndex(null); } }}
                     className="group relative aspect-square rounded-lg overflow-hidden border bg-white"
                   >
-                    <Image src={item.url.trim()} alt={`Ảnh ${index + 1}`} fill className="object-cover" />
+                    {item.type === "video" ? (
+                      <video
+                        src={item.url.trim()}
+                        className="h-full w-full object-cover"
+                        muted
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : (
+                      <Image src={item.url.trim()} alt={`Ảnh ${index + 1}`} fill className="object-cover" />
+                    )}
+                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">
+                      {item.type === "video" ? "Video" : "Ảnh"}
+                    </span>
                     <div className="absolute inset-0 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 bg-black/30 transition">
                       <GripVertical className="w-4 h-4 text-white" />
                       <button type="button" onClick={() => setMedia((m) => m.filter((_, i) => i !== index))}

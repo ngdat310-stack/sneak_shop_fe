@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { RealtimeSocketProvider } from "@/components/realtime/RealtimeSocketProvider";
 
-const inter = Inter({ subsets: ["latin"] });
 const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 const googleOAuthEnabled =
   !!googleClientId && googleClientId !== "YOUR_GOOGLE_CLIENT_ID";
@@ -22,7 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" suppressHydrationWarning>
-      <body className={`${inter.className} min-h-full antialiased`}>
+      <body className="min-h-full antialiased font-sans">
         {googleOAuthEnabled ? (
           <GoogleOAuthProvider clientId={googleClientId!}>
             <RealtimeSocketProvider>{children}</RealtimeSocketProvider>

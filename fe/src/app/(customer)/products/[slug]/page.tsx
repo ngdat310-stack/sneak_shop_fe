@@ -16,6 +16,17 @@ import { useAuthStore } from "@/store/auth";
 import { formatRating, formatVND, formatDate } from "@/lib/format";
 import type { Product, Review } from "@/lib/types";
 
+type MediaAsset = {
+  url: string;
+  type: "image" | "video";
+};
+
+const inferMediaTypeFromUrl = (url: string): "image" | "video" => {
+  const clean = url.split("?")[0].toLowerCase();
+  if (/\.(mp4|webm|ogg|mov|m4v)$/.test(clean)) return "video";
+  return "image";
+};
+
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const [product, setProduct] = useState<Product | null>(null);
@@ -24,7 +35,7 @@ export default function ProductDetailPage() {
   const [selectedVariantId, setSelectedVariantId] = useState<number | null>(null);
   const [selectedColorId, setSelectedColorId] = useState<number | null>(null);
   const [quantity, setQuantity] = useState(1);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedMedia, setSelectedMedia] = useState<MediaAsset | null>(null);
   const [adding, setAdding] = useState(false);
   const [buying, setBuying] = useState(false);
   const { setItems } = useCartStore();
@@ -65,7 +76,17 @@ export default function ProductDetailPage() {
     ]).then(([pRes]) => {
       const p = pRes.data.result;
       setProduct(p);
-      setSelectedImage(p.coverImageUrl ?? p.media?.[0]?.imageUrl ?? null);
+      const firstMedia = p.media?.[0];
+      setSelectedMedia(
+        p.coverImageUrl
+          ? { url: p.coverImageUrl, type: "image" }
+          : firstMedia
+            ? {
+                url: firstMedia.imageUrl,
+                type: firstMedia.type === "video" ? "video" : inferMediaTypeFromUrl(firstMedia.imageUrl),
+              }
+            : null
+      );
     }).catch(() => {}).finally(() => setLoading(false));
 
     // Load reviews separately with product id (need id first)
@@ -134,7 +155,7 @@ export default function ProductDetailPage() {
       const imageUrl = firstColor
         ? resolveColorImage(product, firstColor.color, firstSizeWithColor.id, firstColor.id)
         : null;
-      if (imageUrl) setSelectedImage(imageUrl);
+      if (imageUrl) setSelectedMedia({ url: imageUrl, type: "image" });
     }
   }, [product, selectedVariantId]);
 
@@ -150,7 +171,7 @@ export default function ProductDetailPage() {
     const imageUrl = nextColor
       ? resolveColorImage(product, nextColor.color, selectedVariant.id, nextColor.id)
       : null;
-    if (imageUrl) setSelectedImage(imageUrl);
+    if (imageUrl) setSelectedMedia({ url: imageUrl, type: "image" });
   }, [selectedVariant, selectedColorId]);
 
   const copyProductUrl = async () => {
@@ -191,6 +212,12 @@ export default function ProductDetailPage() {
     if (selectedVariant && selectedVariant.colors.length > 0 && !selectedColorId) {
       toast.error("Vui lòng chọn màu"); return;
     }
+    const fallbackImage =
+      product.media?.find((item) => item.type !== "video")?.imageUrl ??
+      product.coverImageUrl ??
+      null;
+    const buyNowImage =
+      selectedMedia?.type === "image" ? selectedMedia.url : fallbackImage;
 
     const buyNowItem = {
       productId: product.id,
@@ -200,7 +227,7 @@ export default function ProductDetailPage() {
       productName: product.name,
       variantName: selectedVariant?.size ? `Size ${selectedVariant.size}` : null,
       colorName: selectedColor?.color ?? null,
-      productImage: selectedImage ?? product.coverImageUrl,
+      productImage: buyNowImage,
       unitPrice: discountedPrice ?? price,
     };
 
@@ -233,9 +260,16 @@ export default function ProductDetailPage() {
   const colorImages = (product.variants ?? [])
     .flatMap((variant) => (variant.colors ?? []).map((color) => color.imageUrl))
     .filter((url): url is string => Boolean(url));
-  const images = [...new Set(
-    [product.coverImageUrl, ...mediaItems.map((i) => i.imageUrl), ...colorImages].filter(Boolean) as string[]
-  )];
+  const imageItems: MediaAsset[] = [
+    ...(product.coverImageUrl ? [{ url: product.coverImageUrl, type: "image" as const }] : []),
+    ...mediaItems
+      .filter((item) => Boolean(item.imageUrl))
+      .map((item) => ({
+        url: item.imageUrl,
+        type: item.type === "video" ? "video" : inferMediaTypeFromUrl(item.imageUrl),
+      })),
+    ...colorImages.map((url) => ({ url, type: "image" as const })),
+  ].filter((item, index, arr) => arr.findIndex((x) => x.url === item.url) === index);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
@@ -243,23 +277,41 @@ export default function ProductDetailPage() {
         {/* Images */}
         <div>
           <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-50 mb-3">
-            {selectedImage ? (
-              <Image src={selectedImage} alt={product.name} fill className="object-cover" />
+            {selectedMedia ? (
+              selectedMedia.type === "video" ? (
+                <video
+                  src={selectedMedia.url}
+                  className="h-full w-full object-cover"
+                  controls
+                  playsInline
+                  autoPlay
+                  muted
+                />
+              ) : (
+                <Image src={selectedMedia.url} alt={product.name} fill className="object-cover" />
+              )
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-300 text-6xl">👟</div>
             )}
           </div>
-          {images.length > 1 && (
+          {imageItems.length > 1 && (
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {images.map((img, i) => (
+              {imageItems.map((asset, i) => (
                 <button
                   key={i}
-                  onClick={() => setSelectedImage(img)}
+                  onClick={() => setSelectedMedia(asset)}
                   className={`relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border-2 transition ${
-                    selectedImage === img ? "border-black" : "border-transparent"
+                    selectedMedia?.url === asset.url ? "border-black" : "border-transparent"
                   }`}
                 >
-                  <Image src={img} alt="" fill className="object-cover" />
+                  {asset.type === "video" ? (
+                    <video src={asset.url} className="h-full w-full object-cover" muted playsInline preload="metadata" />
+                  ) : (
+                    <Image src={asset.url} alt="" fill className="object-cover" />
+                  )}
+                  {asset.type === "video" && (
+                    <span className="absolute left-1 top-1 rounded bg-black/60 px-1 text-[10px] text-white">Video</span>
+                  )}
                 </button>
               ))}
             </div>
@@ -324,7 +376,7 @@ export default function ProductDetailPage() {
                       const imageUrl = nextColor
                         ? resolveColorImage(product, nextColor.color, v.id, nextColor.id)
                         : null;
-                      if (imageUrl) setSelectedImage(imageUrl);
+                      if (imageUrl) setSelectedMedia({ url: imageUrl, type: "image" });
                     }}
                     className={`px-4 py-2 rounded-lg border text-sm font-medium transition ${
                       selectedVariantId === v.id
@@ -358,7 +410,7 @@ export default function ProductDetailPage() {
                         if (!activeColor || disabled || !selectedVariant) return;
                         setSelectedColorId(activeColor.id);
                         const imageUrl = resolveColorImage(product, activeColor.color, selectedVariant.id, activeColor.id);
-                        if (imageUrl) setSelectedImage(imageUrl);
+                        if (imageUrl) setSelectedMedia({ url: imageUrl, type: "image" });
                       }}
                       disabled={disabled}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium transition ${
