@@ -468,12 +468,14 @@ export default function AdminProductFormPage() {
                 type="number"
                 min={0}
                 max={100}
-                value={form.discountPercent}
+                value={form.discountPercent === 0 ? "" : form.discountPercent}
                 className="w-40"
                 onChange={(e) => {
-                  const v = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                  const raw = e.target.value.trim();
+                  const v = raw === "" ? 0 : Math.min(100, Math.max(0, Number(raw) || 0));
                   setForm((f) => ({ ...f, discountPercent: v }));
                 }}
+                placeholder="0"
               />
             </div>
           </div>

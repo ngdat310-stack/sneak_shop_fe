@@ -19,8 +19,6 @@ const toSlug = (name: string) =>
     .trim().replace(/\s+/g, "-").replace(/-+/g, "-");
 
 interface FormState {
-  mode: "no_menu" | "has_menu";
-  mainCategoryId: string;
   parentId: string;
   name: string;
   slug: string;
@@ -28,20 +26,13 @@ interface FormState {
   status: "active" | "inactive";
 }
 
-const emptyForm = (mode: "no_menu" | "has_menu" = "no_menu"): FormState => ({
-  mode, mainCategoryId: "", parentId: "", name: "", slug: "", sortOrder: "", status: "active",
+const emptyForm = (): FormState => ({
+  parentId: "", name: "", slug: "", sortOrder: "", status: "active",
 });
 
 const getDescendantIds = (items: Category[], id: number): number[] => {
   const children = items.filter((i) => i.parentId === id).map((i) => i.id);
   return children.flatMap((cid) => [cid, ...getDescendantIds(items, cid)]);
-};
-
-const getRootAncestorId = (items: Category[], id: number): number | null => {
-  const current = items.find((item) => item.id === id);
-  if (!current) return null;
-  if (current.parentId == null) return current.id;
-  return getRootAncestorId(items, current.parentId);
 };
 
 type CategoryNode = Category & { children: CategoryNode[] };
@@ -93,7 +84,6 @@ export default function AdminCategoriesPage() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [editing, setEditing] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
-  const [createKind, setCreateKind] = useState<"main" | "child" | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -108,13 +98,11 @@ export default function AdminCategoriesPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) { toast.error("Vui lòng nhập tên danh mục"); return; }
-    if (form.mode === "has_menu" && !form.mainCategoryId) { toast.error("Vui lòng chọn danh mục chính"); return; }
-    if (form.mode === "has_menu" && !form.parentId) { toast.error("Vui lòng chọn danh mục cha"); return; }
     setSaving(true);
     try {
       const payload = {
         name: form.name.trim(), slug: form.slug,
-        parentId: form.mode === "has_menu" && form.parentId ? Number(form.parentId) : null,
+        parentId: form.parentId ? Number(form.parentId) : null,
         sortOrder: form.sortOrder ? Number(form.sortOrder) : 0,
         status: form.status,
       };
@@ -136,24 +124,19 @@ export default function AdminCategoriesPage() {
     catch { toast.error("Không thể khôi phục"); }
   };
 
-  const openCreate = (mode: "no_menu" | "has_menu") => {
-    setForm(emptyForm(mode));
+  const openCreate = () => {
+    setForm(emptyForm());
     setEditing(null);
-    setCreateKind(mode === "no_menu" ? "main" : "child");
     setOpen(true);
   };
   const openEdit = (c: Category) => {
-    const rootId = getRootAncestorId(activeCategories, c.id);
     setForm({
-      mode: c.parentId ? "has_menu" : "no_menu",
-      mainCategoryId: rootId ? String(rootId) : "",
       parentId: c.parentId ? String(c.parentId) : "",
       name: c.name, slug: c.slug,
       sortOrder: c.sortOrder != null ? String(c.sortOrder) : "",
       status: c.status === "inactive" ? "inactive" : "active",
     });
     setEditing(c.id);
-    setCreateKind(null);
     setOpen(true);
   };
 
@@ -162,9 +145,6 @@ export default function AdminCategoriesPage() {
     ? new Set<number>([editing, ...getDescendantIds(activeCategories, editing)])
     : new Set<number>();
   const parentOptions = activeCategories.filter((c) => !c.parentId && !editingDescendants.has(c.id));
-  const childParentOptions = form.mainCategoryId
-    ? activeCategories.filter((c) => c.parentId === Number(form.mainCategoryId) && !editingDescendants.has(c.id))
-    : activeCategories.filter((c) => c.parentId && !editingDescendants.has(c.id));
 
   const categoryTree = buildCategoryTree(activeCategories);
   const rows: Array<{ node: CategoryNode; depth: number }> = [];
@@ -181,10 +161,7 @@ export default function AdminCategoriesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Quản lý danh mục</h1>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={() => openCreate("no_menu")} className="gap-1">
-            <Plus className="w-4 h-4" />Thêm danh mục chính
-          </Button>
-          <Button size="sm" onClick={() => openCreate("has_menu")} className="gap-1">
+          <Button size="sm" onClick={() => openCreate()} className="gap-1">
             <Plus className="w-4 h-4" />Thêm danh mục
           </Button>
         </div>
@@ -259,88 +236,35 @@ export default function AdminCategoriesPage() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="w-[56vw] min-w-[720px] max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {editing !== null ? "Sửa danh mục" : form.mode === "no_menu" ? "Thêm danh mục chính" : "Thêm danh mục"}
-            </DialogTitle>
+            <DialogTitle>{editing !== null ? "Sửa danh mục" : "Thêm danh mục"}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave} className="grid gap-4 md:grid-cols-2">
-            {createKind === "child" && (
-              <div className="md:col-span-2">
-                <p className="text-sm font-medium mb-1">Chức năng</p>
-                <Select
-                  value={form.mode}
-                  onValueChange={(v) => setForm((f) => ({
-                    ...f,
-                    mode: v === "has_menu" ? "has_menu" : "no_menu",
-                    parentId: v === "has_menu" ? f.parentId : "",
-                  }))}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue>{form.mode === "has_menu" ? "Có menu" : "Không có menu"}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="no_menu">Không có menu</SelectItem>
-                    <SelectItem value="has_menu">Có menu</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="md:col-span-2">
+              <p className="text-sm font-medium mb-1">Danh mục cha <span className="text-gray-400">(không bắt buộc)</span></p>
+              <Select value={form.parentId || ""} onValueChange={(v) => setForm((f) => ({ ...f, parentId: v ?? "" }))}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Không chọn danh mục cha" />
+                </SelectTrigger>
+                <SelectContent>
+                  {parentOptions.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-400 mt-1">
+                Để trống thì lưu thành danh mục cha. Chọn một danh mục cha để lưu thành danh mục con.
+              </p>
+            </div>
 
-            {createKind === "child" && (
-              <div className="md:col-span-2">
-                <p className="text-sm font-medium mb-1">Danh mục chính <span className="text-red-500">*</span></p>
-                <Select
-                  value={form.mainCategoryId}
-                  onValueChange={(v) => setForm((f) => ({ ...f, mainCategoryId: v ?? "", parentId: "" }))}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue>
-                      {parentOptions.find((c) => c.id === Number(form.mainCategoryId))?.name ?? ""}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {parentOptions.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {form.mode === "has_menu" ? (
-              <div className="md:col-span-2">
-                <p className="text-sm font-medium mb-1">Danh mục cha <span className="text-red-500">*</span></p>
-                <Select value={form.parentId || ""} onValueChange={(v) => setForm((f) => ({ ...f, parentId: String(v) }))}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue>
-                      {childParentOptions.find((c) => c.id === Number(form.parentId))?.name ?? ""}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {childParentOptions.map((c) => (
-                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            ) : (
-              <div className="md:col-span-2">
-                <p className="text-sm font-medium mb-1">Tên danh mục chính <span className="text-red-500">*</span></p>
-                <Input value={form.name} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, name: v, slug: toSlug(v) })); }} required />
-              </div>
-            )}
-
-            {form.mode === "has_menu" && (
-              <div className="md:col-span-2">
-                <p className="text-sm font-medium mb-1">Tên danh mục con <span className="text-red-500">*</span></p>
-                <Input value={form.name} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, name: v, slug: toSlug(v) })); }} required />
-              </div>
-            )}
+            <div className="md:col-span-2">
+              <p className="text-sm font-medium mb-1">Tên danh mục <span className="text-red-500">*</span></p>
+              <Input value={form.name} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, name: v, slug: toSlug(v) })); }} required />
+            </div>
 
             <div>
               <p className="text-sm font-medium mb-1">Số thứ tự</p>
               <Input type="number" value={form.sortOrder} onChange={(e) => setForm((f) => ({ ...f, sortOrder: e.target.value }))} min={1} />
-              <p className="text-xs text-gray-400 mt-1">Để trống để tự động xếp cuối</p>
+              <p className="text-xs text-gray-400 mt-1">Áp dụng cho cả danh mục cha và danh mục con.</p>
             </div>
 
             <div>
