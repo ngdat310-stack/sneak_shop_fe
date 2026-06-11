@@ -29,7 +29,8 @@ public class AdminUserController {
 
     record UserSummary(Integer id, String email, String username, String fullName, String phone,
                        String gender, String birthDate, String role, String status,
-                       Instant createdAt, boolean locked, String lockReason, Instant lockedAt) {}
+                       Instant createdAt, boolean locked, String lockReason, Instant lockedAt,
+                       boolean enabled) {}
 
     record CreateRequest(
             @NotBlank @Email String email,
@@ -122,6 +123,19 @@ public class AdminUserController {
         return ApiResponse.ok("Da mo khoa tai khoan", toSummary(userRepository.save(user)));
     }
 
+    @DeleteMapping("/{id}")
+    public ApiResponse<UserSummary> delete(@PathVariable Integer id) {
+        UserEntity user = findUser(id);
+        if (user.getDeletedAt() != null && user.getStatus() == UserStatus.inactive && Boolean.FALSE.equals(user.getEnabled())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Tai khoan da bi xoa");
+        }
+        user.setStatus(UserStatus.inactive);
+        user.setEnabled(false);
+        user.setDeletedAt(Instant.now());
+        user.setLockReason("Da xoa tai khoan");
+        return ApiResponse.ok("Da xoa tai khoan", toSummary(userRepository.save(user)));
+    }
+
     private UserEntity findUser(Integer id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "User khong ton tai"));
@@ -132,6 +146,6 @@ public class AdminUserController {
                 u.getGender() != null ? u.getGender().name() : null,
                 u.getBirthDate() != null ? u.getBirthDate().toString() : null,
                 u.getRole().name(), u.getStatus().name(), u.getCreatedAt(), u.getDeletedAt() != null,
-                u.getLockReason(), u.getDeletedAt());
+                u.getLockReason(), u.getDeletedAt(), Boolean.TRUE.equals(u.getEnabled()));
     }
 }

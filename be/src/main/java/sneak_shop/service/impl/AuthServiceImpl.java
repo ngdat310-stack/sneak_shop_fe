@@ -1,3 +1,5 @@
+
+
 package sneak_shop.service.impl;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -142,7 +144,7 @@ public class AuthServiceImpl implements AuthService {
                     .orElseThrow(() -> new AppException(ErrorCode.UNAUTHORIZED, "Thông tin đăng nhập không đúng"));
         }
 
-        if (user.getDeletedAt() != null || user.getStatus() == UserStatus.inactive) {
+        if (user.getDeletedAt() != null || user.getStatus() == UserStatus.inactive || Boolean.FALSE.equals(user.getEnabled())) {
             throw new AppException(ErrorCode.UNAUTHORIZED, lockedMessage(user));
         }
 
@@ -197,7 +199,7 @@ public class AuthServiceImpl implements AuthService {
             userRepository.save(user);
         }
 
-        if (user.getDeletedAt() != null || user.getStatus() == UserStatus.inactive) {
+        if (user.getDeletedAt() != null || user.getStatus() == UserStatus.inactive || Boolean.FALSE.equals(user.getEnabled())) {
             throw new AppException(ErrorCode.UNAUTHORIZED, lockedMessage(user));
         }
         if (created[0]) {
@@ -228,7 +230,7 @@ public class AuthServiceImpl implements AuthService {
             userRepository.save(user);
         }
 
-        if (user.getDeletedAt() != null || user.getStatus() == sneak_shop.enums.UserStatus.inactive) {
+        if (user.getDeletedAt() != null || user.getStatus() == sneak_shop.enums.UserStatus.inactive || Boolean.FALSE.equals(user.getEnabled())) {
             throw new AppException(ErrorCode.UNAUTHORIZED, lockedMessage(user));
         }
         if (created[0]) {
@@ -245,6 +247,9 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private String lockedMessage(UserEntity user) {
+        if (Boolean.FALSE.equals(user.getEnabled()) || user.getStatus() == UserStatus.inactive) {
+            return "Tài khoản đã bị xóa";
+        }
         String lockedAt = user.getDeletedAt() != null ? " lúc " + user.getDeletedAt() : "";
         if (user.getLockReason() != null && !user.getLockReason().isBlank()) {
             return "Tài khoản đã bị khóa" + lockedAt + ": " + user.getLockReason();

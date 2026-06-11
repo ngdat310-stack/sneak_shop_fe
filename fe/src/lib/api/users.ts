@@ -29,4 +29,7 @@ export const usersApi = {
 
   unlock: (id: number) =>
     api.patch<ApiResponse<User>>(`/api/admin/users/${id}/unlock`, {}),
+
+  delete: (id: number) =>
+    api.delete<ApiResponse<User>>(`/api/admin/users/${id}`),
 };

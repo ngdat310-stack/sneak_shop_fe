@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { usersApi } from "@/lib/api/users";
 import { formatDate } from "@/lib/format";
 import type { User } from "@/lib/types";
-import { Search, Lock, Unlock } from "lucide-react";
+import { Search, Lock, Trash2, Unlock } from "lucide-react";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -58,6 +58,17 @@ export default function AdminUsersPage() {
     setLockTarget(user);
     setLockReason("");
     setLockOpen(true);
+  };
+
+  const handleDelete = async (user: User) => {
+    if (!confirm(`Xóa tài khoản ${user.fullName}?`)) return;
+    try {
+      await usersApi.delete(user.id);
+      toast.success("Đã xóa tài khoản");
+      load();
+    } catch {
+      toast.error("Thao tác thất bại");
+    }
   };
 
   const submitLock = async (e: React.FormEvent) => {
@@ -154,7 +165,21 @@ export default function AdminUsersPage() {
                     <Badge variant="outline" className="capitalize text-xs">{roleLabel(user.role)}</Badge>
                   </td>
                   <td className="px-4 py-3">
-                    {user.locked ? (
+                    {user.enabled === false ? (
+                      <div className="space-y-1">
+                        <Badge variant="secondary" className="text-xs">Đã xóa</Badge>
+                        {user.lockReason && (
+                          <p className="max-w-xs whitespace-pre-wrap break-words text-xs text-gray-500">
+                            Lý do: {user.lockReason}
+                          </p>
+                        )}
+                        {user.lockedAt && (
+                          <p className="text-[11px] text-gray-400">
+                            Thời gian xóa: {formatDate(user.lockedAt)}
+                          </p>
+                        )}
+                      </div>
+                    ) : user.locked ? (
                       <div className="space-y-1">
                         <Badge variant="destructive" className="text-xs">Đã khóa</Badge>
                         {user.lockReason && (
@@ -174,10 +199,22 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-xs">{formatDate(user.createdAt)}</td>
                   <td className="px-4 py-3">
-                    <Button size="sm" variant="outline" onClick={() => handleLock(user)} className="gap-1">
-                      {user.locked ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                      {user.locked ? "Mở khóa" : "Khóa"}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => handleLock(user)} className="gap-1" disabled={user.enabled === false}>
+                        {user.locked ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                        {user.locked ? "Mở khóa" : "Khóa"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1 text-red-600 hover:text-red-700"
+                        onClick={() => void handleDelete(user)}
+                        disabled={user.enabled === false}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        Xóa
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))

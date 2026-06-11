@@ -36,6 +36,7 @@ public class RealtimeWebSocketAuthInterceptor implements HandshakeInterceptor {
         try {
             Integer userId = Integer.valueOf(jwtService.getSubject(token));
             var user = userRepository.findById(userId)
+                    .filter(u -> Boolean.TRUE.equals(u.getEnabled()))
                     .filter(u -> u.getDeletedAt() == null && u.getStatus() == UserStatus.active)
                     .orElse(null);
             if (user == null) {

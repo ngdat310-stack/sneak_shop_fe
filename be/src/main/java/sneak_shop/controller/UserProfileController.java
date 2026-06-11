@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
@@ -105,6 +106,18 @@ public class UserProfileController {
         userRepository.save(user);
 
         return ResponseEntity.ok(Map.of("url", url));
+    }
+
+    @DeleteMapping("/me")
+    public ApiResponse<Void> deleteMyAccount(@AuthenticationPrincipal UserContext ctx) {
+        UserEntity user = userRepository.findById(ctx.id())
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "User khong ton tai"));
+        user.setStatus(sneak_shop.enums.UserStatus.inactive);
+        user.setEnabled(false);
+        user.setDeletedAt(Instant.now());
+        user.setLockReason("Da xoa tai khoan");
+        userRepository.save(user);
+        return ApiResponse.ok("Da xoa tai khoan");
     }
 
     private String normalize(String value) {

@@ -43,6 +43,7 @@ export interface User {
   locked: boolean;
   lockReason?: string | null;
   lockedAt?: string | null;
+  enabled?: boolean;
 }
 
 export interface Product {

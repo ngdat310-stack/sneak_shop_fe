@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { toast } from "sonner";
 import { GripVertical, ImagePlus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -198,13 +197,11 @@ export default function AdminBannersPage() {
               className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md"
             >
               <div className="relative aspect-[16/10] bg-gray-100">
-                <Image
+                <img
                   src={toFrontendImageUrl(banner.imageUrl)}
                   alt={`Banner ${index + 1}`}
-                  fill
-                  unoptimized
-                  className="object-cover"
-                  sizes="(max-width: 1280px) 100vw, 33vw"
+                  className="absolute inset-0 h-full w-full object-cover"
+                  loading="lazy"
                 />
 
                 <div className="absolute left-3 top-3 flex items-center gap-2">

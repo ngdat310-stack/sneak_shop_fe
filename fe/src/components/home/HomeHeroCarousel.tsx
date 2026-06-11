@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Banner } from "@/lib/types";
@@ -34,14 +33,11 @@ export default function HomeHeroCarousel({ banners }: { banners: Banner[] }) {
   return (
     <section className="relative w-full overflow-hidden bg-[#0b1f20] text-white">
       <div className="relative h-[60vh] min-h-[520px] w-full">
-        <Image
+        <img
           src={active.imageUrl}
           alt="Banner trang chủ"
-          fill
-          priority
-          unoptimized
-          className="object-cover"
-          sizes="100vw"
+          className="absolute inset-0 h-full w-full object-cover"
+          loading="eager"
         />
 
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(6,27,29,0.96)_0%,rgba(6,27,29,0.9)_34%,rgba(6,27,29,0.52)_62%,rgba(6,27,29,0.18)_100%)]" />

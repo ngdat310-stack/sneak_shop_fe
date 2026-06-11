@@ -47,6 +47,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             Integer userId = Integer.valueOf(jwtService.getSubject(token));
             UserEntity user = userRepository.findById(userId)
+                    .filter(u -> Boolean.TRUE.equals(u.getEnabled()))
                     .filter(u -> u.getDeletedAt() == null && u.getStatus() == UserStatus.active)
                     .orElseThrow(() -> new JwtException("User khong ton tai hoac da bi khoa"));
             UserContext principal = UserContext.from(user);
