@@ -20,6 +20,7 @@ const toSlug = (name: string) =>
 
 interface CreateLevelState {
   enabled: boolean;
+  id: number | null;
   name: string;
   sortOrder: string;
 }
@@ -33,9 +34,27 @@ interface CreateFormState {
 
 const emptyCreateLevel = (enabled = false): CreateLevelState => ({
   enabled,
+  id: null,
   name: "",
   sortOrder: "",
 });
+
+const categoryToLevel = (category?: Category): CreateLevelState => category
+  ? {
+      enabled: true,
+      id: category.id,
+      name: category.name,
+      sortOrder: category.sortOrder != null ? String(category.sortOrder) : "",
+    }
+  : emptyCreateLevel(false);
+
+const firstChildOf = (items: Category[], parentId: number) =>
+  items
+    .filter((item) => !item.deleted && item.parentId === parentId)
+    .sort((a, b) => {
+      const orderDiff = (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+      return orderDiff || a.name.localeCompare(b.name);
+    })[0];
 
 const emptyCreateForm = (): CreateFormState => ({
   status: "active",
@@ -142,16 +161,31 @@ export default function AdminCategoriesPage() {
         const parentName = createForm.parent.name.trim();
         let parentId: number | null = null;
         if (createForm.parent.enabled && parentName) {
-          const parentRes = await createCategory(parentName, editing, createForm.parent.sortOrder);
+          const parentRes = createForm.parent.id !== null
+            ? await categoriesApi.adminUpdate(createForm.parent.id, {
+                name: parentName,
+                slug: toSlug(parentName),
+                parentId: editing,
+                sortOrder: createForm.parent.sortOrder ? Number(createForm.parent.sortOrder) : 0,
+                status: createForm.status,
+              })
+            : await createCategory(parentName, editing, createForm.parent.sortOrder);
           parentId = parentRes.data.result.id;
         }
 
         if (createForm.child.enabled && createForm.child.name.trim()) {
-          await createCategory(
-            createForm.child.name,
-            parentId ?? editing,
-            createForm.child.sortOrder
-          );
+          const childName = createForm.child.name.trim();
+          if (createForm.child.id !== null) {
+            await categoriesApi.adminUpdate(createForm.child.id, {
+              name: childName,
+              slug: toSlug(childName),
+              parentId: parentId ?? editing,
+              sortOrder: createForm.child.sortOrder ? Number(createForm.child.sortOrder) : 0,
+              status: createForm.status,
+            });
+          } else {
+            await createCategory(childName, parentId ?? editing, createForm.child.sortOrder);
+          }
         }
         toast.success("Đã cập nhật");
       }
@@ -200,15 +234,14 @@ export default function AdminCategoriesPage() {
     setOpen(true);
   };
   const openEdit = (c: Category) => {
+    const parent = firstChildOf(categories, c.id);
+    const child = parent ? firstChildOf(categories, parent.id) : undefined;
+
     setCreateForm({
       status: c.status === "inactive" ? "inactive" : "active",
-      main: {
-        enabled: true,
-        name: c.name,
-        sortOrder: c.sortOrder != null ? String(c.sortOrder) : "",
-      },
-      parent: emptyCreateLevel(false),
-      child: emptyCreateLevel(false),
+      main: categoryToLevel(c),
+      parent: categoryToLevel(parent),
+      child: categoryToLevel(child),
     });
     setEditing(c.id);
     setOpen(true);

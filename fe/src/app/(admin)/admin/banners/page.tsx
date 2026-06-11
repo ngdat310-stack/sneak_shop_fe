@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { bannersApi } from "@/lib/api/banners";
 import type { Banner } from "@/lib/types";
+import { toFrontendImageUrl } from "@/lib/image";
 
 const MAX_BANNERS = 9;
 
@@ -198,9 +199,10 @@ export default function AdminBannersPage() {
             >
               <div className="relative aspect-[16/10] bg-gray-100">
                 <Image
-                  src={banner.imageUrl}
+                  src={toFrontendImageUrl(banner.imageUrl)}
                   alt={`Banner ${index + 1}`}
                   fill
+                  unoptimized
                   className="object-cover"
                   sizes="(max-width: 1280px) 100vw, 33vw"
                 />

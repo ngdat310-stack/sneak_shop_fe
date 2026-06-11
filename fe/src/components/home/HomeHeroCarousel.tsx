@@ -5,12 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Banner } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import { toFrontendImageUrl } from "@/lib/image";
 
 export default function HomeHeroCarousel({ banners }: { banners: Banner[] }) {
   const slides = useMemo(() => {
     return banners.slice(0, 3).map((banner) => ({
       id: banner.id,
-      imageUrl: banner.imageUrl,
+      imageUrl: toFrontendImageUrl(banner.imageUrl),
     }));
   }, [banners]);
 
@@ -38,6 +39,7 @@ export default function HomeHeroCarousel({ banners }: { banners: Banner[] }) {
           alt="Banner trang chủ"
           fill
           priority
+          unoptimized
           className="object-cover"
           sizes="100vw"
         />
