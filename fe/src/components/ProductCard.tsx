@@ -5,28 +5,64 @@ import { Badge } from "@/components/ui/badge";
 import { formatRating, formatVND } from "@/lib/format";
 import type { Product } from "@/lib/types";
 
+const inferMediaTypeFromUrl = (url: string): "image" | "video" => {
+  const clean = url.split("?")[0].toLowerCase();
+  if (/\.(mp4|webm|ogg|mov|m4v)$/.test(clean)) return "video";
+  return "image";
+};
+
 export default function ProductCard({ product }: { product: Product }) {
   const discounted =
     product.discountPercent > 0
       ? product.price * (1 - product.discountPercent / 100)
       : null;
+  const primaryMedia =
+    product.media?.find((item) => item.imageUrl && item.type !== "video") ??
+    product.media?.[0] ??
+    null;
+  const displayUrl =
+    primaryMedia?.imageUrl ||
+    product.coverImageUrl ||
+    product.variants.flatMap((variant) => variant.colors.map((color) => color.imageUrl)).find(Boolean) ||
+    null;
+  const displayType =
+    primaryMedia?.type === "video"
+      ? "video"
+      : displayUrl
+        ? inferMediaTypeFromUrl(displayUrl)
+        : "image";
 
   return (
     <Link href={`/products/${product.slug}`}>
       <div className="group rounded-xl border bg-white overflow-hidden hover:shadow-lg transition-all duration-200">
         <div className="relative aspect-square bg-gray-50 overflow-hidden">
-          {product.coverImageUrl ? (
-            <Image
-              src={product.coverImageUrl}
-              alt={product.name}
-              fill
-              className="object-cover group-hover:scale-105 transition-transform duration-300"
-              sizes="(max-width: 768px) 50vw, 25vw"
-            />
+          {displayUrl ? (
+            displayType === "video" ? (
+              <video
+                src={displayUrl}
+                className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                muted
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <Image
+                src={displayUrl}
+                alt={product.name}
+                fill
+                className="object-cover group-hover:scale-105 transition-transform duration-300"
+                sizes="(max-width: 768px) 50vw, 25vw"
+              />
+            )
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-300 text-4xl">
               👟
             </div>
+          )}
+          {displayType === "video" && (
+            <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
+              Video
+            </span>
           )}
           {product.discountPercent > 0 && (
             <Badge className="absolute top-2 left-2 bg-red-500 text-white">
